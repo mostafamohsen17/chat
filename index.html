@@ -26,7 +26,6 @@
             background: white;
         }
 
-        /* قائمة المحادثات - الشمال */
         .contacts-sidebar {
             width: 400px;
             background: #f0f2f5;
@@ -46,6 +45,58 @@
             gap: 10px;
         }
 
+        .bulk-actions {
+            background: #f0f2f5;
+            padding: 10px 20px;
+            border-bottom: 1px solid #ddd;
+            display: none;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .bulk-actions.show {
+            display: flex;
+        }
+
+        .bulk-btn {
+            background: #008069;
+            color: white;
+            border: none;
+            padding: 8px 15px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background 0.2s;
+        }
+
+        .bulk-btn:hover {
+            background: #006d5b;
+        }
+
+        .bulk-btn.cancel {
+            background: #dc3545;
+        }
+
+        .bulk-btn.cancel:hover {
+            background: #c82333;
+        }
+
+        .select-all-btn {
+            background: transparent;
+            color: #008069;
+            border: 1px solid #008069;
+        }
+
+        .select-all-btn:hover {
+            background: #008069;
+            color: white;
+        }
+
+        .bulk-count {
+            color: #667781;
+            font-size: 14px;
+        }
+
         .contacts-list {
             flex: 1;
             overflow-y: auto;
@@ -60,6 +111,7 @@
             display: flex;
             align-items: center;
             gap: 15px;
+            position: relative;
         }
 
         .contact-item:hover {
@@ -68,6 +120,21 @@
 
         .contact-item.active {
             background: #e9edef;
+        }
+
+        .contact-checkbox {
+            width: 20px;
+            height: 20px;
+            cursor: pointer;
+            display: none;
+        }
+
+        .contact-item.selectable .contact-checkbox {
+            display: block;
+        }
+
+        .contact-item.selected {
+            background: #e1f5fe;
         }
 
         .contact-avatar {
@@ -116,7 +183,6 @@
             text-align: center;
         }
 
-        /* منطقة المحادثة - اليمين */
         .chat-area {
             flex: 1;
             display: flex;
@@ -302,7 +368,6 @@
             color: #667781;
         }
 
-        /* Scrollbar styling */
         .contacts-list::-webkit-scrollbar,
         .messages-container::-webkit-scrollbar {
             width: 6px;
@@ -324,41 +389,34 @@
             background: #999;
         }
 
-        /* Responsive */
         @media (max-width: 768px) {
             .contacts-sidebar {
                 width: 100%;
-                display: none;
-            }
-
-            .contacts-sidebar.show {
-                display: flex;
-            }
-
-            .chat-area {
-                display: none;
-            }
-
-            .chat-area.show {
-                display: flex;
             }
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <!-- قائمة المحادثات -->
         <div class="contacts-sidebar">
             <div class="sidebar-header">
                 <span>💬</span>
                 <span>المحادثات</span>
+                <button onclick="toggleBulkMode()" style="margin-right: auto; background: transparent; border: 1px solid white; color: white; padding: 5px 10px; border-radius: 5px; cursor: pointer; font-size: 13px;">
+                    إرسال جماعي
+                </button>
+            </div>
+            <div class="bulk-actions" id="bulkActions">
+                <button class="bulk-btn select-all-btn" onclick="selectAll()">تحديد الكل</button>
+                <span class="bulk-count" id="bulkCount">0 محدد</span>
+                <button class="bulk-btn" onclick="sendBulkMessage()">إرسال رسالة</button>
+                <button class="bulk-btn cancel" onclick="cancelBulkMode()">إلغاء</button>
             </div>
             <div class="contacts-list" id="contactsList">
                 <div class="loading">جاري تحميل المحادثات...</div>
             </div>
         </div>
 
-        <!-- منطقة المحادثة -->
         <div class="chat-area" id="chatArea">
             <div class="empty-state">
                 <div class="empty-icon">💬</div>
@@ -374,32 +432,23 @@
         
         let allConversations = {};
         let selectedPhone = null;
-        let lastMessageCount = {};
+        let bulkMode = false;
+        let selectedPhones = new Set();
         
-        // إنشاء صوت الإشعار
         const notificationSound = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBSuBzvLZiTYIG2m98OScTgwOU6zn77BYFwg+ltryxnMpBSh+zPLaizsKGGS56+mjUBELTKXh8bllHAU2jdXxxm8oBil6yvLaiDsKGGS56+mjUBELTKXh8bllHAU2jdXxxm8oBil6yvLaiDsKGGS56+mjUBELTKXh8bllHAU2jdXxxm8oBil6yvLaiDsKGGS56+mjUBELTKXh8bllHAU2jdXxxm8oBil6yvLaiDsKGGS56+mjUBELTKXh8bllHAU2jdXxxm8oBil6yvLaiDsKGGS56+mjUBELTKXh8bllHAU2jdXxxm8oBil6yvLaiDsKGGS56+mjUBELTKXh8bllHAU2jdXxxm8oBil6yvLaiDsKGGS56+mjUBELTKXh8bllHAU2jdXxxm8oBil6yvLaiDsKGGS56+mjUBELTKXh8bllHAU2jdXxxm8oBil6yvLaiDsKGGS56+mjUBELTKXh8bllHAU2jdXxxm8o');
 
         async function loadContacts() {
-            const contactsList = document.getElementById('contactsList');
-            
             try {
                 const response = await fetch(API_URL);
-                
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
+                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
                 
                 const data = await response.json();
-                
                 if (!data || data.length <= 1) {
-                    contactsList.innerHTML = '<div class="no-contacts">لا توجد محادثات</div>';
+                    document.getElementById('contactsList').innerHTML = '<div class="no-contacts">لا توجد محادثات</div>';
                     return;
                 }
 
-                // حفظ عدد الرسائل القديم
                 const oldConversations = JSON.parse(JSON.stringify(allConversations));
-                
-                // تجميع المحادثات حسب رقم الهاتف
                 allConversations = {};
                 
                 for (let i = 1; i < data.length; i++) {
@@ -417,56 +466,34 @@
                         allConversations[phone] = [];
                     }
                     
-                    allConversations[phone].push({
-                        customerMsg,
-                        botReply,
-                        timestamp
-                    });
+                    allConversations[phone].push({ customerMsg, botReply, timestamp });
                 }
 
                 if (Object.keys(allConversations).length === 0) {
-                    contactsList.innerHTML = '<div class="no-contacts">لا توجد محادثات</div>';
+                    document.getElementById('contactsList').innerHTML = '<div class="no-contacts">لا توجد محادثات</div>';
                     return;
                 }
 
-                // التحقق من الرسائل الجديدة
                 checkForNewMessages(oldConversations);
-
-                // عرض قائمة جهات الاتصال
                 displayContacts();
                 
-                // تحديث المحادثة المفتوحة إذا كانت موجودة
                 if (selectedPhone && allConversations[selectedPhone]) {
                     updateCurrentChat();
                 }
-                
             } catch (error) {
                 console.error('Error loading contacts:', error);
-                contactsList.innerHTML = '<div class="no-contacts">❌ حدث خطأ في تحميل المحادثات</div>';
+                document.getElementById('contactsList').innerHTML = '<div class="no-contacts">❌ حدث خطأ في تحميل المحادثات</div>';
             }
         }
 
         function checkForNewMessages(oldConversations) {
-            // التحقق من وجود رسائل جديدة
             for (const phone in allConversations) {
                 const newCount = allConversations[phone].length;
                 const oldCount = oldConversations[phone] ? oldConversations[phone].length : 0;
                 
-                if (newCount > oldCount) {
-                    // رسالة جديدة!
-                    // تشغيل الصوت إذا لم تكن المحادثة مفتوحة
-                    if (selectedPhone !== phone) {
-                        playNotificationSound();
-                    }
+                if (newCount > oldCount && selectedPhone !== phone) {
+                    notificationSound.play().catch(e => {});
                 }
-            }
-        }
-
-        function playNotificationSound() {
-            try {
-                notificationSound.play().catch(e => console.log('Sound play failed:', e));
-            } catch (e) {
-                console.log('Sound error:', e);
             }
         }
 
@@ -505,7 +532,6 @@
             
             messagesContainer.innerHTML = messagesHtml;
             
-            // التمرير للأسفل فقط إذا كان المستخدم في الأسفل
             if (scrolledToBottom) {
                 setTimeout(() => {
                     messagesContainer.scrollTop = messagesContainer.scrollHeight;
@@ -515,21 +541,30 @@
 
         function displayContacts() {
             const contactsList = document.getElementById('contactsList');
-            const phones = Object.keys(allConversations).reverse();
+            const phones = Object.keys(allConversations).sort((a, b) => {
+                const lastA = allConversations[a][allConversations[a].length - 1];
+                const lastB = allConversations[b][allConversations[b].length - 1];
+                const timeA = new Date(lastA.timestamp).getTime();
+                const timeB = new Date(lastB.timestamp).getTime();
+                return timeB - timeA;
+            });
             
             let html = '';
-            
             phones.forEach(phone => {
                 const messages = allConversations[phone];
                 const lastMessage = messages[messages.length - 1];
                 const messageCount = messages.length;
                 const initial = phone.substring(0, 2);
-                
-                // آخر رسالة
+                const isSelected = selectedPhones.has(phone);
                 const lastText = lastMessage.customerMsg || lastMessage.botReply || 'لا توجد رسائل';
                 
                 html += `
-                    <div class="contact-item" onclick="openChat('${phone}')">
+                    <div class="contact-item ${bulkMode ? 'selectable' : ''} ${isSelected ? 'selected' : ''}" 
+                         onclick="${bulkMode ? `togglePhone('${phone}')` : `openChat('${phone}')`}">
+                        <input type="checkbox" class="contact-checkbox" 
+                               ${isSelected ? 'checked' : ''} 
+                               onchange="togglePhone('${phone}')" 
+                               onclick="event.stopPropagation()">
                         <div class="contact-avatar">${initial}</div>
                         <div class="contact-info">
                             <div class="contact-name">${phone}</div>
@@ -547,13 +582,11 @@
             selectedPhone = phone;
             const messages = allConversations[phone];
             
-            // تحديث الـ active state
             document.querySelectorAll('.contact-item').forEach(item => {
                 item.classList.remove('active');
             });
             event.currentTarget.classList.add('active');
             
-            // عرض المحادثة
             const chatArea = document.getElementById('chatArea');
             const initial = phone.substring(0, 2);
             
@@ -600,18 +633,13 @@
                         rows="1"
                         onkeypress="handleKeyPress(event)"
                     ></textarea>
-                    <button id="sendButton" class="send-button" onclick="sendMessage()">
-                        ➤
-                    </button>
+                    <button id="sendButton" class="send-button" onclick="sendMessage()">➤</button>
                 </div>
             `;
             
-            // التمرير للأسفل
             setTimeout(() => {
                 const container = document.getElementById('messagesContainer');
-                if (container) {
-                    container.scrollTop = container.scrollHeight;
-                }
+                if (container) container.scrollTop = container.scrollHeight;
             }, 100);
         }
 
@@ -625,7 +653,6 @@
         async function sendMessage() {
             const input = document.getElementById('messageInput');
             const message = input.value.trim();
-            
             if (!message || !selectedPhone) return;
             
             const sendButton = document.getElementById('sendButton');
@@ -633,12 +660,9 @@
             sendButton.innerHTML = '⏳';
             
             try {
-                // إرسال الرسالة للويب هوك
                 const response = await fetch(WEBHOOK_URL, {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         body: {
                             entry: [{
@@ -647,9 +671,7 @@
                                         messages: [{
                                             from: selectedPhone,
                                             type: 'text',
-                                            text: {
-                                                body: message
-                                            }
+                                            text: { body: message }
                                         }]
                                     }
                                 }]
@@ -659,14 +681,8 @@
                 });
                 
                 if (response.ok) {
-                    // مسح الـ input
                     input.value = '';
-                    
-                    // إضافة الرسالة للواجهة مباشرة (على الشمال)
                     const messagesContainer = document.getElementById('messagesContainer');
-                    const now = new Date();
-                    const timeStr = formatTime(now.toISOString());
-                    
                     const newMessage = document.createElement('div');
                     newMessage.className = 'message bot-message';
                     newMessage.innerHTML = `
@@ -674,29 +690,20 @@
                             <div class="message-text">${escapeHtml(message)}</div>
                         </div>
                     `;
-                    
                     messagesContainer.appendChild(newMessage);
                     messagesContainer.scrollTop = messagesContainer.scrollHeight;
-                    
                     sendButton.innerHTML = '✓';
-                    setTimeout(() => {
-                        sendButton.innerHTML = '➤';
-                    }, 1000);
+                    setTimeout(() => sendButton.innerHTML = '➤', 1000);
                 } else {
                     alert('فشل إرسال الرسالة');
                     sendButton.innerHTML = '✗';
-                    setTimeout(() => {
-                        sendButton.innerHTML = '➤';
-                    }, 2000);
+                    setTimeout(() => sendButton.innerHTML = '➤', 2000);
                 }
-                
             } catch (error) {
-                console.error('Error sending message:', error);
+                console.error('Error:', error);
                 alert('حدث خطأ في إرسال الرسالة');
                 sendButton.innerHTML = '✗';
-                setTimeout(() => {
-                    sendButton.innerHTML = '➤';
-                }, 2000);
+                setTimeout(() => sendButton.innerHTML = '➤', 2000);
             } finally {
                 sendButton.disabled = false;
             }
@@ -705,9 +712,7 @@
         function formatTime(timestamp) {
             try {
                 const date = new Date(timestamp);
-                const hours = date.getHours().toString().padStart(2, '0');
-                const minutes = date.getMinutes().toString().padStart(2, '0');
-                return `${hours}:${minutes}`;
+                return `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
             } catch {
                 return timestamp;
             }
@@ -719,13 +724,100 @@
             return div.innerHTML;
         }
 
-        // تحميل المحادثات عند فتح الصفحة
+        function toggleBulkMode() {
+            bulkMode = !bulkMode;
+            selectedPhones.clear();
+            document.getElementById('bulkActions').classList.toggle('show', bulkMode);
+            displayContacts();
+            updateBulkCount();
+        }
+
+        function cancelBulkMode() {
+            bulkMode = false;
+            selectedPhones.clear();
+            document.getElementById('bulkActions').classList.remove('show');
+            displayContacts();
+        }
+
+        function togglePhone(phone) {
+            if (selectedPhones.has(phone)) {
+                selectedPhones.delete(phone);
+            } else {
+                selectedPhones.add(phone);
+            }
+            displayContacts();
+            updateBulkCount();
+        }
+
+        function selectAll() {
+            const phones = Object.keys(allConversations);
+            if (selectedPhones.size === phones.length) {
+                selectedPhones.clear();
+            } else {
+                phones.forEach(phone => selectedPhones.add(phone));
+            }
+            displayContacts();
+            updateBulkCount();
+        }
+
+        function updateBulkCount() {
+            document.getElementById('bulkCount').textContent = `${selectedPhones.size} محدد`;
+        }
+
+        async function sendBulkMessage() {
+            if (selectedPhones.size === 0) {
+                alert('الرجاء تحديد رقم واحد على الأقل');
+                return;
+            }
+
+            const message = prompt('أدخل الرسالة المراد إرسالها:');
+            if (!message || !message.trim()) return;
+
+            if (!confirm(`هل تريد إرسال الرسالة إلى ${selectedPhones.size} رقم؟`)) return;
+
+            let successCount = 0;
+            let failCount = 0;
+
+            for (const phone of selectedPhones) {
+                try {
+                    const response = await fetch(WEBHOOK_URL, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            body: {
+                                entry: [{
+                                    changes: [{
+                                        value: {
+                                            messages: [{
+                                                from: phone,
+                                                type: 'text',
+                                                text: { body: message }
+                                            }]
+                                        }
+                                    }]
+                                }]
+                            }
+                        })
+                    });
+
+                    if (response.ok) {
+                        successCount++;
+                    } else {
+                        failCount++;
+                    }
+                    await new Promise(resolve => setTimeout(resolve, 500));
+                } catch (error) {
+                    console.error(`Error sending to ${phone}:`, error);
+                    failCount++;
+                }
+            }
+
+            alert(`تم الإرسال!\n✅ نجح: ${successCount}\n❌ فشل: ${failCount}`);
+            cancelBulkMode();
+        }
+
         loadContacts();
-        
-        // تحديث تلقائي كل 5 ثواني
-        setInterval(() => {
-            loadContacts();
-        }, 1000);
+        setInterval(() => loadContacts(), 5000);
     </script>
 </body>
 </html>
